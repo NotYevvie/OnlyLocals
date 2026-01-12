@@ -43,8 +43,6 @@ function check_installations() {
   else
     echo "  > hf found"
   fi
-
-  echo -e "\nAll required installations are present."
 }
 
 function check_nvidia_smi() {
@@ -101,5 +99,6 @@ function verify_model() {
 check_installations
 check_nvidia_smi
 
-EMBEDDING_MODEL_PATH=$(verify_model "model/jinaai/jina-code-embeddings-0.5b")
-echo "Snapshot: ${EMBEDDING_MODEL_PATH}"
+for model in "${REQUIRED_MODELS[@]}"; do
+  verify_model "$model"
+done
