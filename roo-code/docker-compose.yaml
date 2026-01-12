@@ -1,0 +1,58 @@
+services:
+  embedding-model:
+    image: embedding-inference:latest
+    profiles: ["embeddings", "embedding"]
+    container_name: embedding-inference
+    runtime: nvidia
+    pid: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ${HF_HOME}:/data
+  embedding-manager:
+    image: embedding-manager:latest
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.manager
+    profiles: ["embeddings"]
+    container_name: embedding-manager
+    runtime: nvidia
+    pid: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "1335:8000"
+    volumes:
+      - ${HF_HOME}:/data
+    environment:
+      - TEI_BASE_URL=http://embedding-model:8000
+      - MODEL_PATH=/data/hub/models--jinaai--jina-reranker-v3/snapshots/050e171c4f75dfec5b648ed8470a2475e5a30f30
+      - PORT=8000
+      - HF_HUB_OFFLINE=1
+    depends_on:
+      - embedding-model
+      - db-vector
+  db-vector:
+    image: qdrant/qdrant:latest
+    profiles: ["embeddings"]
+    container_name: db-vector
+    volumes:
+      - ${HOME}/.qdrant_data:/qdrant/storage
