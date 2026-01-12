@@ -6,9 +6,9 @@ function check_installations() {
   # Check for required tools
   if ! which docker >/dev/null 2>&1; then
     echo "Error: docker is not installed or not in PATH. Install it with:"
-    echo "curl -fsSL https://get.docker.com | sh"
+    echo -e "curl -fsSL https://get.docker.com | sh\n"
     echo "And add your user to the docker group:"
-    echo "sudo usermod -aG docker \$USER"
+    echo -e "sudo usermod -aG docker \$USER\n"
     exit 1
   else
     echo "  > docker found"
@@ -24,9 +24,21 @@ function check_installations() {
 
   if ! which hf >/dev/null 2>&1; then
     echo "Error: Hugging Face CLI (hf) is not installed or not in PATH. Install it with:"
-    # Check for homebrew
-    # Check for pip, pipx, pip3
-    echo "pip install huggingface_hub[cli]"
+    
+    # Check for available package managers and suggest installation command
+    if which brew >/dev/null 2>&1; then
+      echo "  brew install huggingface-cli"
+    elif which pipx >/dev/null 2>&1; then
+      echo "  pipx install huggingface_hub[cli]"
+    elif which pip3 >/dev/null 2>&1; then
+      echo "  pip3 install huggingface_hub[cli]"
+    elif which pip >/dev/null 2>&1; then
+      echo "  pip install huggingface_hub[cli]"
+    else
+      echo "  No package manager found. Recommended: install Homebrew with:"
+      echo "  /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+      echo "  Then run: brew install huggingface-cli"
+    fi
     exit 1
   else
     echo "  > hf found"
