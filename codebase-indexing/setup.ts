@@ -1,4 +1,4 @@
-import { checkEnvironment } from "./src/checkEnvironment.ts";
+import { checkHostEnvironment } from "./src/checkHostEnvironment.ts";
 import { upsertTokenizer } from "./src/upsertTokenizer.ts";
 
 function getScriptDir(): string {
@@ -9,6 +9,6 @@ function getScriptDir(): string {
 }
 
 (async () => {
-  await checkEnvironment();
+  await checkHostEnvironment();
   await upsertTokenizer(`${getScriptDir()}/assets`);
 })();

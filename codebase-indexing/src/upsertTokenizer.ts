@@ -63,11 +63,16 @@ async function copyTokenizerFiles(snapshotDir: string, assetsPath: string, files
     }
 }
 
+export async function getEmbeddingModelSnapshotDir(): Promise<string> {
+    const snapshotDir = await getModelSnapshot(MODEL_NAME);
+    return snapshotDir;
+}
+
 export async function upsertTokenizer(assetsPath: string = "./assets"): Promise<void> {
     try {
         console.log(`\nChecking tokenizer files for ${MODEL_NAME}...`);
 
-        const snapshotDir = await getModelSnapshot(MODEL_NAME);
+        const snapshotDir = await getEmbeddingModelSnapshotDir();
         console.log(`  Model snapshot: ${snapshotDir}`);
 
         const missingFiles = await getMissingFiles(snapshotDir);

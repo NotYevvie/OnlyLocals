@@ -193,7 +193,7 @@ async function verifyModel(modelName: string, hfCache: string): Promise<CheckRes
   };
 }
 
-export async function checkEnvironment() {
+export async function checkHostEnvironment() {
   console.log("Checking installations...\n");
   
   const installChecks = await Promise.all([
