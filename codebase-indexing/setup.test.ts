@@ -29,19 +29,19 @@ async function runCommand(command: string[], env?: Record<string, string>) {
 
 describe("setup.ts direct runtime execution (E2E)", () => {
   test("should run with bun", async () => {
-    const result = await runCommand(["bun", "run", "src/setup.ts"]);
+    const result = await runCommand(["bun", "run", "setup.ts"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Checking installations...");
   });
 
   test("should run with deno", async () => {
-    const result = await runCommand(["deno", "run", "--allow-all", "src/setup.ts"]);
+    const result = await runCommand(["deno", "run", "--allow-all", "setup.ts"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Checking installations...");
   });
 
   test("should run with node (tsx)", async () => {
-    const result = await runCommand(["npx", "--yes", "tsx", "src/setup.ts"]);
+    const result = await runCommand(["npx", "--yes", "tsx", "setup.ts"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Checking installations...");
   });

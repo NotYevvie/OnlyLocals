@@ -87,11 +87,11 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ ! -f "$SCRIPT_DIR/src/setup.ts" ]; then
+if [ ! -f "$SCRIPT_DIR/setup.ts" ]; then
   echo "Error: setup.ts not found in $SCRIPT_DIR/src"
   exit 1
 fi
 
-RUN_COMMAND="$TS_RUNTIME \"$SCRIPT_DIR/src/setup.ts\""
+RUN_COMMAND="$TS_RUNTIME \"$SCRIPT_DIR/setup.ts\""
 echo "Executing: $RUN_COMMAND"
-$TS_RUNTIME "$SCRIPT_DIR/src/setup.ts"
+$TS_RUNTIME "$SCRIPT_DIR/setup.ts"
