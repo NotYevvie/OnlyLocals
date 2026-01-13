@@ -31,22 +31,19 @@ describe("setup.ts direct runtime execution (E2E)", () => {
   test("should run with bun", async () => {
     const result = await runCommand(["bun", "run", "src/setup.ts"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Git command exists: true");
-    expect(result.stdout).toContain("Hello World");
+    expect(result.stdout).toContain("Checking installations...");
   });
 
   test("should run with deno", async () => {
     const result = await runCommand(["deno", "run", "--allow-all", "src/setup.ts"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Git command exists: true");
-    expect(result.stdout).toContain("Hello World");
+    expect(result.stdout).toContain("Checking installations...");
   });
 
   test("should run with node (tsx)", async () => {
     const result = await runCommand(["npx", "--yes", "tsx", "src/setup.ts"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Git command exists: true");
-    expect(result.stdout).toContain("Hello World");
+    expect(result.stdout).toContain("Checking installations...");
   });
 });
 
@@ -55,21 +52,18 @@ describe("setup.sh with RUNTIME environment variable (E2E)", () => {
     const result = await runCommand(["./setup.sh"], { RUNTIME: "bun" });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Executing: bun run");
-    expect(result.stdout).toContain("Hello World");
   });
 
   test("should use RUNTIME=deno", async () => {
     const result = await runCommand(["./setup.sh"], { RUNTIME: "deno" });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Executing: deno run --allow-all");
-    expect(result.stdout).toContain("Hello World");
   });
 
   test("should use RUNTIME=node", async () => {
     const result = await runCommand(["./setup.sh"], { RUNTIME: "node" });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Executing: npx --yes tsx");
-    expect(result.stdout).toContain("Hello World");
   });
 });
 
@@ -77,8 +71,6 @@ describe("setup.sh auto-detection (E2E)", () => {
   test("should auto-detect runtime when RUNTIME not specified", async () => {
     const result = await runCommand(["./setup.sh"]);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("Hello World");
-    // Should contain one of the executing commands
     const hasRuntime =
       result.stdout.includes("Executing: bun run") ||
       result.stdout.includes("Executing: deno run") ||
