@@ -2,12 +2,10 @@
 # shellcheck disable=SC2155
 set -e
 
-# Check if a runtime command exists
 function runtime_exists() {
   which "$1" >/dev/null 2>&1
 }
 
-# Configure runtime command based on type
 function configure_runtime() {
   local runtime="$1"
   case "$runtime" in
@@ -23,7 +21,6 @@ function configure_runtime() {
   esac
 }
 
-# Try to use a specific runtime
 function try_runtime() {
   local runtime="$1"
   
@@ -38,7 +35,7 @@ function try_runtime() {
       if ! runtime_exists node; then
         return 1
       elif ! runtime_exists npx; then
-        echo "  ✗ node found but npx not available"
+        echo "  node found but npx not available"
         echo "     Note: npx comes with Node.js v5.2+"
         return 1
       fi
@@ -52,36 +49,32 @@ function try_runtime() {
   return 0
 }
 
-# Main function to get TypeScript runtime
 function get_ts_runtime() {
-  # Check if RUNTIME environment variable is set
   if [ -n "$RUNTIME" ]; then
     case "$RUNTIME" in
       bun|deno|node)
         if try_runtime "$RUNTIME"; then
           return 0
         else
-          echo "  ✗ RUNTIME=$RUNTIME specified but not available"
+          echo "  RUNTIME=$RUNTIME specified but not available"
           return 1
         fi
         ;;
       *)
-        echo "  ✗ Invalid RUNTIME='$RUNTIME'"
+        echo "  Invalid RUNTIME='$RUNTIME'"
         echo "     Valid: bun, deno, node"
         return 1
         ;;
     esac
   fi
   
-  # Auto-detect runtime by preference order (fastest to slowest)
   for runtime in bun deno node; do
     if try_runtime "$runtime"; then
       return 0
     fi
   done
   
-  # No runtime found
-  echo "  ✗ No TypeScript runtime found"
+  echo "No TypeScript runtime found"
   echo ""
   echo "Install Bun (recommended):"
   echo "  curl -fsSL https://bun.com/install | bash"

@@ -2,7 +2,6 @@ declare const Bun: any;
 declare const Deno: any;
 declare const require: any;
 
-// Async command execution functions
 const runCommandBun = async (command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
     try {
         const result = await Bun.$`sh -c ${command}`.quiet();
@@ -35,9 +34,9 @@ const runCommandDeno = async (command: string): Promise<{ stdout: string; stderr
 };
 
 const runCommandNode = async (command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
-    // @ts-ignore - Node.js modules only available in Node runtime
+    // @ts-ignore - only available in Node runtime
     const { exec } = await import("child_process");
-    // @ts-ignore - Node.js modules only available in Node runtime
+    // @ts-ignore - only available in Node runtime
     const { promisify } = await import("util");
     const execAsync = promisify(exec);
 
@@ -57,7 +56,6 @@ const runCommandNode = async (command: string): Promise<{ stdout: string; stderr
     }
 };
 
-// Sync command execution functions
 const runCommandSyncBun = (command: string): { stdout: string; stderr: string; exitCode: number } => {
     try {
         const proc = Bun.spawnSync(["sh", "-c", command]);
@@ -121,6 +119,5 @@ const runCommandSynchronous = (() => {
     return runCommandSyncNode;
 })();
 
-// Export cached function references for maximum performance
 export const runCommand = runCommandAsync;
 export const runCommandSync = runCommandSynchronous;

@@ -99,13 +99,13 @@ describe("performance characteristics", () => {
     const start = Date.now();
     await runCommand("echo 'speed test'");
     const duration = Date.now() - start;
-    expect(duration).toBeLessThan(1000); // Should complete in less than 1 second
+    expect(duration).toBeLessThan(1000);
   });
 
   test("sync execution should complete quickly", () => {
     const start = Date.now();
     runCommandSync("echo 'sync speed test'");
     const duration = Date.now() - start;
-    expect(duration).toBeLessThan(1000); // Should complete in less than 1 second
+    expect(duration).toBeLessThan(1000);
   });
 });

@@ -8,7 +8,6 @@ type CheckResult = {
   messages: string[];
 };
 
-// Check if Docker is installed
 async function checkDocker(): Promise<CheckResult> {
   const result = await runCommand("which docker");
   if (result.exitCode !== 0) {
@@ -30,7 +29,6 @@ async function checkDocker(): Promise<CheckResult> {
   };
 }
 
-// Check if nvidia-smi is installed
 async function checkNvidiaSmi(): Promise<CheckResult> {
   const result = await runCommand("which nvidia-smi");
   if (result.exitCode !== 0) {
@@ -50,13 +48,11 @@ async function checkNvidiaSmi(): Promise<CheckResult> {
   };
 }
 
-// Check if Hugging Face CLI is installed
 async function checkHuggingFaceCli(): Promise<CheckResult> {
   const result = await runCommand("which hf");
   if (result.exitCode !== 0) {
     const messages = ["Error: Hugging Face CLI (hf) is not installed or not in PATH. Install it with:"];
     
-    // Check for available package managers in parallel
     const [brew, pipx, pip3, pip] = await Promise.all([
       runCommand("which brew"),
       runCommand("which pipx"),
@@ -91,7 +87,6 @@ async function checkHuggingFaceCli(): Promise<CheckResult> {
   };
 }
 
-// Check GPU compute
 async function checkGpu(): Promise<CheckResult> {
   const result = await runCommand("nvidia-smi --query-gpu=compute_cap --format=csv,noheader");
   if (result.exitCode !== 0) {
@@ -123,7 +118,6 @@ async function checkGpu(): Promise<CheckResult> {
   };
 }
 
-// Check CUDA
 async function checkCuda(): Promise<CheckResult> {
   const result = await runCommand("nvidia-smi | grep 'CUDA' | awk '{print $9}'");
   if (result.exitCode !== 0) {
@@ -152,7 +146,6 @@ async function checkCuda(): Promise<CheckResult> {
   };
 }
 
-// Get Hugging Face cache directory
 async function getHfCache(): Promise<string | null> {
   const result = await runCommand("hf env");
   if (result.exitCode !== 0) {
@@ -169,12 +162,10 @@ async function getHfCache(): Promise<string | null> {
   return cache;
 }
 
-// Verify a model exists and get its snapshot directory
 async function verifyModel(modelName: string, hfCache: string): Promise<CheckResult & { snapshot?: string }> {
   const modelNameClean = modelName.replace('model/', '');
   const modelPath = `${hfCache}/models--${modelNameClean.replace(/\//g, '--')}`;
   
-  // Check if model directory exists
   const dirCheck = await runCommand(`[ -d "${modelPath}" ] && echo "exists"`);
   if (dirCheck.exitCode !== 0 || !dirCheck.stdout.includes('exists')) {
     return {
@@ -184,7 +175,6 @@ async function verifyModel(modelName: string, hfCache: string): Promise<CheckRes
     };
   }
   
-  // Find snapshot directory
   const snapshotResult = await runCommand(`find "${modelPath}/snapshots" -maxdepth 1 -mindepth 1 -type d | head -n 1`);
   if (snapshotResult.exitCode !== 0 || !snapshotResult.stdout.trim()) {
     return {
@@ -203,18 +193,15 @@ async function verifyModel(modelName: string, hfCache: string): Promise<CheckRes
   };
 }
 
-// Main setup function
 async function main() {
   console.log("Checking installations...\n");
   
-  // Check all required tools in parallel
   const installChecks = await Promise.all([
     checkDocker(),
     checkNvidiaSmi(),
     checkHuggingFaceCli()
   ]);
   
-  // Display results
   for (const check of installChecks) {
     for (const message of check.messages) {
       if (check.success) {
@@ -233,14 +220,12 @@ async function main() {
   
   console.log("\nRequired tools are installed.\n");
   
-  // Check GPU and CUDA in parallel
   console.log("Checking GPU and CUDA...\n");
   const gpuChecks = await Promise.all([
     checkGpu(),
     checkCuda()
   ]);
   
-  // Display results
   for (const check of gpuChecks) {
     for (const message of check.messages) {
       if (check.success) {
@@ -259,7 +244,6 @@ async function main() {
   
   console.log("\nGPU and CUDA requirements met.\n");
   
-  // Get HF cache and verify models
   console.log("Checking models...\n");
   const hfCache = await getHfCache();
   if (!hfCache) {
@@ -272,12 +256,10 @@ async function main() {
     "model/jinaai/jina-reranker-v3"
   ];
   
-  // Verify all models in parallel
   const modelResults = await Promise.all(
     requiredModels.map(model => verifyModel(model, hfCache!))
   );
   
-  // Display results
   for (const result of modelResults) {
     for (const message of result.messages) {
       if (result.success) {
@@ -311,7 +293,6 @@ async function main() {
   }
 }
 
-// Run main function
 main().catch((error) => {
   console.error("Fatal error:", error);
   process.exit(1);
