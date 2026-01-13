@@ -1,6 +1,6 @@
 {
     "type": "module",
     "scripts": {
-        "test": "bun test --concurrent"
+        "test": "TEST_MODE=true bun test --concurrent"
     }
 }

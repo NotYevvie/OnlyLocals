@@ -78,3 +78,40 @@ describe("setup.sh auto-detection (E2E)", () => {
     expect(hasRuntime).toBe(true);
   });
 });
+
+describe("setup scripts from parent directory (path resolution test)", () => {
+  async function runFromParent(command: string[], env?: Record<string, string>) {
+    const grandParentDir = import.meta.dir.replace(/\/codebase-indexing$/, "");
+    
+    const proc = Bun.spawn(command, {
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: grandParentDir,
+      env: env ? { ...process.env, ...env } : process.env,
+    });
+    
+    const exitCode = await proc.exited;
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    
+    return { exitCode, stdout, stderr };
+  }
+
+  test("should run setup.sh from parent directory", async () => {
+    const result = await runFromParent(["./codebase-indexing/setup.sh"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Checking installations");
+  });
+
+  test("should run setup.ts with bun from parent directory", async () => {
+    const result = await runFromParent(["bun", "run", "./codebase-indexing/setup.ts"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("Checking installations");
+  });
+
+  test("should find assets/tokenizer.json from parent directory", async () => {
+    const result = await runFromParent(["./codebase-indexing/setup.sh"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).not.toContain("Source tokenizer not found");
+  });
+});
