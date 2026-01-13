@@ -2,116 +2,166 @@ import { runCommand } from "./runner.ts";
 
 declare const process: any;
 
+type CheckResult = {
+  success: boolean;
+  name: string;
+  messages: string[];
+};
+
 // Check if Docker is installed
-async function checkDocker(): Promise<boolean> {
+async function checkDocker(): Promise<CheckResult> {
   const result = await runCommand("which docker");
   if (result.exitCode !== 0) {
-    console.error("Error: docker is not installed or not in PATH. Install it with:");
-    console.error("curl -fsSL https://get.docker.com | sh\n");
-    console.error("And add your user to the docker group:");
-    console.error("sudo usermod -aG docker $USER\n");
-    return false;
+    return {
+      success: false,
+      name: "Docker",
+      messages: [
+        "Error: docker is not installed or not in PATH. Install it with:",
+        "curl -fsSL https://get.docker.com | sh\n",
+        "And add your user to the docker group:",
+        "sudo usermod -aG docker $USER\n"
+      ]
+    };
   }
-  console.log("  docker found");
-  return true;
+  return {
+    success: true,
+    name: "Docker",
+    messages: ["  docker found"]
+  };
 }
 
 // Check if nvidia-smi is installed
-async function checkNvidiaSmi(): Promise<boolean> {
+async function checkNvidiaSmi(): Promise<CheckResult> {
   const result = await runCommand("which nvidia-smi");
   if (result.exitCode !== 0) {
-    console.error("Error: nvidia-smi is not installed or not in PATH");
-    console.error("Note: NVIDIA GPU and drivers are required for this setup");
-    return false;
+    return {
+      success: false,
+      name: "NVIDIA Drivers",
+      messages: [
+        "Error: nvidia-smi is not installed or not in PATH",
+        "Note: NVIDIA GPU and drivers are required for this setup"
+      ]
+    };
   }
-  console.log("  nvidia-smi found");
-  return true;
+  return {
+    success: true,
+    name: "NVIDIA Drivers",
+    messages: ["  nvidia-smi found"]
+  };
 }
 
 // Check if Hugging Face CLI is installed
-async function checkHuggingFaceCli(): Promise<boolean> {
+async function checkHuggingFaceCli(): Promise<CheckResult> {
   const result = await runCommand("which hf");
   if (result.exitCode !== 0) {
-    console.error("Error: Hugging Face CLI (hf) is not installed or not in PATH. Install it with:");
+    const messages = ["Error: Hugging Face CLI (hf) is not installed or not in PATH. Install it with:"];
     
-    // Check for available package managers
-    const brew = await runCommand("which brew");
-    const pipx = await runCommand("which pipx");
-    const pip3 = await runCommand("which pip3");
-    const pip = await runCommand("which pip");
+    // Check for available package managers in parallel
+    const [brew, pipx, pip3, pip] = await Promise.all([
+      runCommand("which brew"),
+      runCommand("which pipx"),
+      runCommand("which pip3"),
+      runCommand("which pip")
+    ]);
     
     if (brew.exitCode === 0) {
-      console.error("  brew install huggingface-cli");
+      messages.push("  brew install huggingface-cli");
     } else if (pipx.exitCode === 0) {
-      console.error("  pipx install huggingface_hub[cli]");
+      messages.push("  pipx install huggingface_hub[cli]");
     } else if (pip3.exitCode === 0) {
-      console.error("  pip3 install huggingface_hub[cli]");
+      messages.push("  pip3 install huggingface_hub[cli]");
     } else if (pip.exitCode === 0) {
-      console.error("  pip install huggingface_hub[cli]");
+      messages.push("  pip install huggingface_hub[cli]");
     } else {
-      console.error("  No package manager found. Recommended: install Homebrew with:");
-      console.error('  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"');
-      console.error("  Then run: brew install huggingface-cli");
+      messages.push("  No package manager found. Recommended: install Homebrew with:");
+      messages.push('  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"');
+      messages.push("  Then run: brew install huggingface-cli");
     }
-    return false;
+    
+    return {
+      success: false,
+      name: "Hugging Face CLI",
+      messages
+    };
   }
-  console.log("  hf found");
-  return true;
+  return {
+    success: true,
+    name: "Hugging Face CLI",
+    messages: ["  hf found"]
+  };
 }
 
-// Check GPU compute capability
-async function checkGpu(): Promise<boolean> {
+// Check GPU compute
+async function checkGpu(): Promise<CheckResult> {
   const result = await runCommand("nvidia-smi --query-gpu=compute_cap --format=csv,noheader");
   if (result.exitCode !== 0) {
-    console.error("Error: Failed to query GPU compute capability");
-    return false;
+    return {
+      success: false,
+      name: "GPU Compute",
+      messages: ["Error: Failed to query GPU compute"]
+    };
   }
   
   const computeCap = result.stdout.trim().split('\n')[0].trim();
   const major = computeCap.split('.')[0];
   
   if (major !== '12') {
-    console.error(`Error: Blackwell GPU (compute capability 12.x) required`);
-    console.error(`Found: ${computeCap}`);
-    return false;
+    return {
+      success: false,
+      name: "GPU Compute",
+      messages: [
+        `Error: Blackwell GPU (compute 12.x) required`,
+        `Found: ${computeCap}`
+      ]
+    };
   }
   
-  console.log(`  Compute capability ${computeCap} found`);
-  return true;
+  return {
+    success: true,
+    name: "GPU Compute",
+    messages: [`  Compute ${computeCap} found`]
+  };
 }
 
-// Check CUDA version
-async function checkCuda(): Promise<boolean> {
-  const result = await runCommand("nvidia-smi | grep 'CUDA Version' | awk '{print $9}'");
+// Check CUDA
+async function checkCuda(): Promise<CheckResult> {
+  const result = await runCommand("nvidia-smi | grep 'CUDA' | awk '{print $9}'");
   if (result.exitCode !== 0) {
-    console.error("Error: Failed to query CUDA version");
-    return false;
+    return {
+      success: false,
+      name: "CUDA",
+      messages: ["Error: Failed to query CUDA"]
+    };
   }
   
   const cudaVersion = result.stdout.trim();
   const major = parseInt(cudaVersion.split('.')[0]);
   
   if (major < 13) {
-    console.error(`Error: CUDA 13.1+ required, found: ${cudaVersion}`);
-    return false;
+    return {
+      success: false,
+      name: "CUDA",
+      messages: [`Error: CUDA 13.1+ required, found: ${cudaVersion}`]
+    };
   }
   
-  console.log(`  CUDA version ${cudaVersion} found`);
-  return true;
+  return {
+    success: true,
+    name: "CUDA",
+    messages: [`  CUDA ${cudaVersion} found`]
+  };
 }
 
 // Get Hugging Face cache directory
 async function getHfCache(): Promise<string | null> {
   const result = await runCommand("hf env");
   if (result.exitCode !== 0) {
-    console.error("Error: Failed to get HF environment info");
     return null;
   }
   
   const lines = result.stdout.split('\n');
   const cacheLine = lines.find(line => line.includes('HF_HUB_CACHE:'));
   if (!cacheLine) {
-    console.error("Error: Could not find HF_HUB_CACHE in hf env output");
     return null;
   }
   
@@ -120,56 +170,94 @@ async function getHfCache(): Promise<string | null> {
 }
 
 // Verify a model exists and get its snapshot directory
-async function verifyModel(modelName: string, hfCache: string): Promise<string | null> {
+async function verifyModel(modelName: string, hfCache: string): Promise<CheckResult & { snapshot?: string }> {
   const modelNameClean = modelName.replace('model/', '');
   const modelPath = `${hfCache}/models--${modelNameClean.replace(/\//g, '--')}`;
   
   // Check if model directory exists
   const dirCheck = await runCommand(`[ -d "${modelPath}" ] && echo "exists"`);
   if (dirCheck.exitCode !== 0 || !dirCheck.stdout.includes('exists')) {
-    console.error(`Error: Model not found at ${modelPath}`);
-    return null;
+    return {
+      success: false,
+      name: modelNameClean,
+      messages: [`Error: Model not found at ${modelPath}`]
+    };
   }
   
   // Find snapshot directory
   const snapshotResult = await runCommand(`find "${modelPath}/snapshots" -maxdepth 1 -mindepth 1 -type d | head -n 1`);
   if (snapshotResult.exitCode !== 0 || !snapshotResult.stdout.trim()) {
-    console.error(`Error: No snapshot found in ${modelPath}/snapshots`);
-    return null;
+    return {
+      success: false,
+      name: modelNameClean,
+      messages: [`Error: No snapshot found in ${modelPath}/snapshots`]
+    };
   }
   
   const snapshotDir = snapshotResult.stdout.trim();
-  console.log(`  Model found: ${modelNameClean}`);
-  return snapshotDir;
+  return {
+    success: true,
+    name: modelNameClean,
+    messages: [`  ${modelNameClean}`],
+    snapshot: snapshotDir
+  };
 }
 
 // Main setup function
 async function main() {
   console.log("Checking installations...\n");
   
-  // Check all required tools
-  const dockerOk = await checkDocker();
-  const nvidiaSmiOk = await checkNvidiaSmi();
-  const hfOk = await checkHuggingFaceCli();
+  // Check all required tools in parallel
+  const installChecks = await Promise.all([
+    checkDocker(),
+    checkNvidiaSmi(),
+    checkHuggingFaceCli()
+  ]);
   
-  if (!dockerOk || !nvidiaSmiOk || !hfOk) {
+  // Display results
+  for (const check of installChecks) {
+    for (const message of check.messages) {
+      if (check.success) {
+        console.log(message);
+      } else {
+        console.error(message);
+      }
+    }
+  }
+  
+  const installsOk = installChecks.every(r => r.success);
+  if (!installsOk) {
     console.error("\nSetup failed: Missing required tools");
     process.exit(1);
   }
   
   console.log("\nRequired tools are installed.\n");
   
-  // Check GPU and CUDA
+  // Check GPU and CUDA in parallel
   console.log("Checking GPU and CUDA...\n");
-  const gpuOk = await checkGpu();
-  const cudaOk = await checkCuda();
+  const gpuChecks = await Promise.all([
+    checkGpu(),
+    checkCuda()
+  ]);
   
-  if (!gpuOk || !cudaOk) {
+  // Display results
+  for (const check of gpuChecks) {
+    for (const message of check.messages) {
+      if (check.success) {
+        console.log(message);
+      } else {
+        console.error(message);
+      }
+    }
+  }
+  
+  const gpuOk = gpuChecks.every(r => r.success);
+  if (!gpuOk) {
     console.error("\nSetup failed: GPU/CUDA requirements not met");
     process.exit(1);
   }
   
-  console.log("\nGPU and CUDA requirements OK.\n");
+  console.log("\nGPU and CUDA requirements met.\n");
   
   // Get HF cache and verify models
   console.log("Checking models...\n");
@@ -184,23 +272,42 @@ async function main() {
     "model/jinaai/jina-reranker-v3"
   ];
   
-  const modelSnapshots: Record<string, string> = {};
+  // Verify all models in parallel
+  const modelResults = await Promise.all(
+    requiredModels.map(model => verifyModel(model, hfCache!))
+  );
   
-  for (const model of requiredModels) {
-    const snapshot = await verifyModel(model, hfCache!);
-    if (!snapshot) {
-      console.error(`\nSetup failed: Model ${model} not found or incomplete`);
-      console.error(`Download with: hf download ${model.replace('model/', '')}`);
-      process.exit(1);
+  // Display results
+  for (const result of modelResults) {
+    for (const message of result.messages) {
+      if (result.success) {
+        console.log(message);
+      } else {
+        console.error(message);
+      }
     }
-    modelSnapshots[model] = snapshot!;
+  }
+  
+  const modelsOk = modelResults.every(r => r.success);
+  if (!modelsOk) {
+    console.error("\nSetup failed: Some models are missing or incomplete");
+    console.error("\nDownload missing models with:");
+    for (let i = 0; i < modelResults.length; i++) {
+      if (!modelResults[i].success) {
+        console.error(`  hf download ${requiredModels[i].replace('model/', '')}`);
+      }
+    }
+    process.exit(1);
   }
   
   console.log("\nRequired models present.\n");
   console.log("Setup complete!");
   console.log("\nModel snapshots:");
-  for (const [model, snapshot] of Object.entries(modelSnapshots)) {
-    console.log(`  ${model}: ${snapshot}`);
+  for (let i = 0; i < modelResults.length; i++) {
+    const result = modelResults[i];
+    if (result.snapshot) {
+      console.log(`  ${result.name}: ${result.snapshot}`);
+    }
   }
 }
 
