@@ -1,8 +1,6 @@
 services:
   embedding-model:
-    image: TODO_DOCKERHUB_IMAGE
-    build:
-      context: ./codebase-indexing
+    image:  yevai/codebase-index-embed:sm120-cu131-v1
     env_file:
       - .env
     profiles: ["codebase-indexing"]
@@ -25,15 +23,23 @@ services:
               count: all
               capabilities: [gpu]
     volumes:
-      - ${HF_HOME}:/data
+      - ${HF_CACHE_DIR}:/data
+    command:
+      - --model-id
+      - ${EMBEDDING_MODEL_PATH}
+      - --pooling
+      - last-token
+      - --max-client-batch-size
+      - "${MAX_CLIENT_BATCH_SIZE:-64}"
+      - --max-batch-tokens
+      - "${MAX_BATCH_TOKENS:-32768}"
   embedding-manager:
-    image: TODO_DOCKERHUB_IMAGE
-    build:
-      context: ./codebase-indexing
+    image: yevai/codebase-index-rerank:sm120-cu131-v1
     env_file:
       - .env
     depends_on:
       - embedding-model
+      - db-vector
     profiles: ["codebase-indexing"]
     container_name: embedding-manager
     restart: "no"
@@ -56,20 +62,16 @@ services:
     ports:
       - "1335:8000"
     volumes:
-      - ${HF_HOME}:/data
+      - ${HF_CACHE_DIR}:/data
     environment:
-      - TEI_BASE_URL=http://embedding-model:8000
-      - MODEL_PATH=/data/hub/models--jinaai--jina-reranker-v3/snapshots/050e171c4f75dfec5b648ed8470a2475e5a30f30
+      - TEI_BASE_URL=${TEI_BASE_URL}
+      - MODEL_PATH=${RERANKER_MODEL_PATH}
       - PORT=8000
       - HF_HUB_OFFLINE=1
-    depends_on:
-      - embedding-model
-      - db-vector
   db-vector:
     image: qdrant/qdrant:latest
     profiles: ["codebase-indexing"]
     container_name: db-vector
-    restart: "yes"
     labels:
       - "ephemeral=false"
       - "persistence=hfs"

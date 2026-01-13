@@ -5,6 +5,9 @@ declare const process: any;
 let hfCacheDir: string | null = null;
 const modelPaths: Map<string, string> = new Map();
 
+const EMBEDDING_MODEL = "model/jinaai/jina-code-embeddings-0.5b";
+const RERANKER_MODEL = "model/jinaai/jina-reranker-v3";
+
 export async function getHfCacheDir(): Promise<string> {
   if (hfCacheDir) {
     return hfCacheDir;
@@ -25,7 +28,7 @@ export async function getHfCacheDir(): Promise<string> {
   return hfCacheDir;
 }
 
-export async function getModelPath(modelName: string): Promise<string> {
+async function getModelPath(modelName: string): Promise<string> {
   const cacheKey = modelName;
   
   if (modelPaths.has(cacheKey)) {
@@ -45,7 +48,7 @@ export async function getModelPath(modelName: string): Promise<string> {
   return modelPath;
 }
 
-export async function getModelSnapshot(modelName: string): Promise<string> {
+async function getModelSnapshot(modelName: string): Promise<string> {
   const cacheKey = `${modelName}:snapshot`;
   
   if (modelPaths.has(cacheKey)) {
@@ -62,4 +65,15 @@ export async function getModelSnapshot(modelName: string): Promise<string> {
   const snapshotDir = snapshotResult.stdout.trim();
   modelPaths.set(cacheKey, snapshotDir);
   return snapshotDir;
+}
+
+export async function getEmbeddingModelSnapshotDir(): Promise<string> {
+    const snapshotDir = await getModelSnapshot(EMBEDDING_MODEL);
+    return snapshotDir;
+}
+
+
+export async function getRerankerModelSnapshotDir(): Promise<string> {
+    const snapshotDir = await getModelSnapshot(RERANKER_MODEL);
+    return snapshotDir;
 }

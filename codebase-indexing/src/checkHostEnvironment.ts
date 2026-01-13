@@ -87,18 +87,35 @@ async function checkHuggingFaceCli(): Promise<CheckResult> {
   };
 }
 
-async function checkGpu(): Promise<CheckResult> {
-  const result = await runCommand("nvidia-smi --query-gpu=compute_cap --format=csv,noheader");
+type GpuInfo = {
+  computeCap: string;
+  memoryFree: number;
+  name: string;
+  driver: string;
+};
+
+async function getGpuInfo(): Promise<GpuInfo> {
+  const result = await runCommand(
+    "nvidia-smi --query-gpu=compute_cap,memory.free,name,driver_version --format=csv,noheader,nounits"
+  );
+  
   if (result.exitCode !== 0) {
-    return {
-      success: false,
-      name: "GPU Compute",
-      messages: ["Error: Failed to query GPU compute"]
-    };
+    throw new Error("Failed to query GPU information");
   }
   
-  const computeCap = result.stdout.trim().split('\n')[0].trim();
-  const major = computeCap.split('.')[0];
+  const line = result.stdout.trim().split('\n')[0];
+  const [computeCap, memoryFree, name, driver] = line.split(',').map(s => s.trim());
+  
+  return {
+    computeCap,
+    memoryFree: parseInt(memoryFree),
+    name,
+    driver
+  };
+}
+
+function checkGpu(gpuInfo: GpuInfo): CheckResult {
+  const major = gpuInfo.computeCap.split('.')[0];
   
   if (major !== '12') {
     return {
@@ -106,7 +123,7 @@ async function checkGpu(): Promise<CheckResult> {
       name: "GPU Compute",
       messages: [
         `Error: Blackwell GPU (compute 12.x) required`,
-        `Found: ${computeCap}`
+        `Found: ${gpuInfo.computeCap}`
       ]
     };
   }
@@ -114,35 +131,47 @@ async function checkGpu(): Promise<CheckResult> {
   return {
     success: true,
     name: "GPU Compute",
-    messages: [`  Compute ${computeCap} found`]
+    messages: [`  Compute ${gpuInfo.computeCap} found`]
   };
 }
 
-async function checkCuda(): Promise<CheckResult> {
-  const result = await runCommand("nvidia-smi | grep 'CUDA' | awk '{print $9}'");
-  if (result.exitCode !== 0) {
+function checkCuda(gpuInfo: GpuInfo): CheckResult {
+  const driverVersion = gpuInfo.driver;
+  const major = parseInt(driverVersion.split('.')[0]);
+  
+  if (major < 590) {
     return {
       success: false,
       name: "CUDA",
-      messages: ["Error: Failed to query CUDA"]
-    };
-  }
-  
-  const cudaVersion = result.stdout.trim();
-  const major = parseInt(cudaVersion.split('.')[0]);
-  
-  if (major < 13) {
-    return {
-      success: false,
-      name: "CUDA",
-      messages: [`Error: CUDA 13.1+ required, found: ${cudaVersion}`]
+      messages: [`Error: Driver 590+ (CUDA 13.1+) required, found: ${driverVersion}`]
     };
   }
   
   return {
     success: true,
     name: "CUDA",
-    messages: [`  CUDA ${cudaVersion} found`]
+    messages: [`  Driver ${driverVersion} found`]
+  };
+}
+
+function checkVram(gpuInfo: GpuInfo): CheckResult {
+  const freeGb = Math.floor(gpuInfo.memoryFree / 1024);
+  
+  if (freeGb < 6) {
+    return {
+      success: false,
+      name: "VRAM",
+      messages: [
+        `Error: At least 6GB free VRAM required`,
+        `Found: ${freeGb}GB VRAM available`
+      ]
+    };
+  }
+  
+  return {
+    success: true,
+    name: "VRAM",
+    messages: [`  ${freeGb}GB VRAM available`]
   };
 }
 
@@ -221,10 +250,14 @@ export async function checkHostEnvironment() {
   console.log("\nRequired tools are installed.\n");
   
   console.log("Checking GPU and CUDA...\n");
-  const gpuChecks = await Promise.all([
-    checkGpu(),
-    checkCuda()
-  ]);
+  
+  const gpuInfo = await getGpuInfo();
+  
+  const gpuChecks = [
+    checkGpu(gpuInfo),
+    checkCuda(gpuInfo),
+    checkVram(gpuInfo)
+  ];
   
   for (const check of gpuChecks) {
     for (const message of check.messages) {
@@ -283,11 +316,4 @@ export async function checkHostEnvironment() {
   }
   
   console.log("\nRequired models present.");
-  console.log("\nModel snapshots:");
-  for (let i = 0; i < modelResults.length; i++) {
-    const result = modelResults[i];
-    if (result.snapshot) {
-      console.log(`  ${result.name}: ${result.snapshot}`);
-    }
-  }
 }

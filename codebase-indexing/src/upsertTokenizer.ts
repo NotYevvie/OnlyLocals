@@ -1,5 +1,5 @@
 import { runCommand } from "./runner.ts";
-import { getModelSnapshot } from "./hfCache.ts";
+import { getEmbeddingModelSnapshotDir } from "./hfCache.ts";
 
 declare const process: any;
 
@@ -9,7 +9,6 @@ declare global {
     }
 }
 
-const MODEL_NAME = "model/jinaai/jina-code-embeddings-0.5b";
 const TOKENIZER_FILES = ["tokenizer.json", "added_tokens.json", "special_tokens_map.json", "tokenizer_config.json"];
 
 async function getMissingFiles(snapshotDir: string): Promise<string[]> {
@@ -63,14 +62,9 @@ async function copyTokenizerFiles(snapshotDir: string, assetsPath: string, files
     }
 }
 
-export async function getEmbeddingModelSnapshotDir(): Promise<string> {
-    const snapshotDir = await getModelSnapshot(MODEL_NAME);
-    return snapshotDir;
-}
-
 export async function upsertTokenizer(assetsPath: string = "./assets"): Promise<void> {
     try {
-        console.log(`\nChecking tokenizer files for ${MODEL_NAME}...`);
+        console.log(`\nChecking tokenizer files...`);
 
         const snapshotDir = await getEmbeddingModelSnapshotDir();
         console.log(`  Model snapshot: ${snapshotDir}`);
@@ -78,7 +72,7 @@ export async function upsertTokenizer(assetsPath: string = "./assets"): Promise<
         const missingFiles = await getMissingFiles(snapshotDir);
 
         if (missingFiles.length === 0) {
-            console.log(`  All tokenizer files already present`);
+            console.log(`\nTokenizer files present.`);
             return;
         }
 
