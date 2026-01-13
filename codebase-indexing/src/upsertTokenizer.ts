@@ -33,29 +33,39 @@ async function copyTokenizerFiles(snapshotDir: string, assetsPath: string, files
         return;
     }
     
-    for (const filename of files) {
-        const sourcePath = `${assetsPath}/${filename}`;
-        const destPath = `${snapshotDir}/${filename}`;
+    const results = await Promise.all(
+        files.map(async (filename) => {
+            const sourcePath = `${assetsPath}/${filename}`;
+            const destPath = `${snapshotDir}/${filename}`;
 
-        const sourceCheck = await runCommand(`[ -f "${sourcePath}" ] && echo "exists"`);
-        if (sourceCheck.exitCode !== 0 || !sourceCheck.stdout.includes('exists')) {
-            console.log(`  Source file not found: ${filename} (skipping)`);
-            continue;
+            const sourceCheck = await runCommand(`[ -f "${sourcePath}" ] && echo "exists"`);
+            if (sourceCheck.exitCode !== 0 || !sourceCheck.stdout.includes('exists')) {
+                return { filename, status: 'missing', message: `Source file not found: ${filename} (skipping)` };
+            }
+
+            const copyResult = await runCommand(`cp "${sourcePath}" "${destPath}"`);
+            if (copyResult.exitCode !== 0) {
+                return { filename, status: 'error', message: `Failed to copy ${filename}: ${copyResult.stderr}` };
+            }
+
+            return { filename, status: 'success', message: `Copied ${filename}` };
+        })
+    );
+    
+    for (const result of results) {
+        if (result.status === 'success') {
+            console.log(`  ${result.message}`);
+        } else if (result.status === 'error') {
+            console.error(`  ${result.message}`);
+        } else {
+            console.log(`  ${result.message}`);
         }
-
-        const copyResult = await runCommand(`cp "${sourcePath}" "${destPath}"`);
-        if (copyResult.exitCode !== 0) {
-            console.error(`  Failed to copy ${filename}: ${copyResult.stderr}`);
-            continue;
-        }
-
-        console.log(`  Copied ${filename}`);
     }
 }
 
 export async function upsertTokenizer(assetsPath: string = "./assets"): Promise<void> {
     try {
-        console.log(`Checking tokenizer files for ${MODEL_NAME}...`);
+        console.log(`\nChecking tokenizer files for ${MODEL_NAME}...`);
 
         const snapshotDir = await getModelSnapshot(MODEL_NAME);
         console.log(`  Model snapshot: ${snapshotDir}`);

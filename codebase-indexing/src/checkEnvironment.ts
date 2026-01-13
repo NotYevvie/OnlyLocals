@@ -282,8 +282,7 @@ export async function checkEnvironment() {
     process.exit(1);
   }
   
-  console.log("\nRequired models present.\n");
-  console.log("Setup complete!");
+  console.log("\nRequired models present.");
   console.log("\nModel snapshots:");
   for (let i = 0; i < modelResults.length; i++) {
     const result = modelResults[i];
