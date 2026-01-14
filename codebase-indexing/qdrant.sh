@@ -6,6 +6,6 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-export RELATIVE_TS_FILE_PATH="setup.ts"
+export RELATIVE_TS_FILE_PATH="src/qdrant.ts"
 
 source "$SCRIPT_DIR/runtime.sh"
