@@ -72,6 +72,9 @@ services:
     image: qdrant/qdrant:latest
     profiles: ["codebase-indexing"]
     container_name: db-vector
+    ports:
+      - "6333:6333"
+      - "6334:6334"
     labels:
       - "ephemeral=false"
       - "persistence=hfs"
