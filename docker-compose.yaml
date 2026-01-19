@@ -1,0 +1,170 @@
+services:
+  inference-model:
+    image: yevai/local-inference-qwen3:sm120-cu131-v1
+    env_file:
+      - ./codebase-indexing/.env
+    profiles: ["local-inference", "dev"]
+    container_name: inference-model
+    cpuset: "0-15"
+    pid: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    labels:
+      - "ephemeral=true"
+      - "persistence=none"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/v1/models || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    shm_size: '16gb'
+    ports:
+      - "1337:8000"
+    volumes:
+      - ${HF_CACHE_DIR}:/root/.cache/huggingface
+      - ${HOME}/.cache/vllm:/root/.cache/vllm
+    environment:
+      - TORCH_CUDA_ARCH_LIST=12.0
+      - NCCL_P2P_DISABLE=1
+      - VLLM_USE_V1=1
+      - VLLM_NO_USAGE_STATS=1
+      - VLLM_FLASH_ATTN_VERSION=3
+      - OMP_NUM_THREADS=16
+      - MKL_NUM_THREADS=16
+      - CUDA_DEVICE_MAX_CONNECTIONS=1
+      - TORCH_CUDNN_V8_API_ENABLED=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - HF_TOKEN=${HF_TOKEN}
+    command:
+      - --model
+      - NVFP4/Qwen3-Coder-30B-A3B-Instruct-FP4
+      - --quantization
+      - modelopt_fp4
+      - --attention-backend
+      - flashinfer
+      - --enable-prefix-caching
+      - --compilation-config
+      - '{"cudagraph_mode": "FULL_DECODE_ONLY", "cache_dir": "/root/.cache/vllm"}'
+      - --max_model_len
+      - "131072"
+      - --max-num-batched-tokens
+      - "2048"
+      - --kv-cache-dtype
+      - fp8_e4m3
+      - --max-num-seqs
+      - "1"
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - qwen3_coder
+      - --gpu-memory-utilization
+      - "0.75"
+      - --swap-space
+      - "16"
+  embedding-model:
+    image:  yevai/codebase-index-embed:sm120-cu131-v1
+    env_file:
+      - ./codebase-indexing/.env
+    depends_on:
+      - db-vector
+    profiles: ["codebase-indexing", "dev"]
+    container_name: embedding-inference
+    cpuset: "16-21"
+    restart: "no"
+    labels:
+      - "ephemeral=true"
+      - "persistence=none"
+    runtime: nvidia
+    pid: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ${HF_CACHE_DIR}:/data
+    command:
+      - --model-id
+      - ${EMBEDDING_MODEL_PATH}
+      - --pooling
+      - last-token
+      - --auto-truncate
+      - --dtype
+      - "float16"
+      - --tokenization-workers
+      - "2"
+      - --max-client-batch-size
+      - "${MAX_CLIENT_BATCH_SIZE:-64}"
+      - --max-batch-tokens
+      - "${MAX_BATCH_TOKENS:-8192}"
+  embedding-manager:
+    image: yevai/codebase-index-rerank:sm120-cu131-v1
+    env_file:
+      - ./codebase-indexing/.env
+    depends_on:
+      - embedding-model
+      - db-vector
+    profiles: ["codebase-indexing", "dev"]
+    container_name: embedding-manager
+    cpuset: "22-27"
+    restart: "no"
+    labels:
+      - "ephemeral=true"
+      - "persistence=none"
+    runtime: nvidia
+    pid: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "1335:8000"
+    volumes:
+      - ${HF_CACHE_DIR}:/data
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - OMP_NUM_THREADS=6
+      - MKL_NUM_THREADS=6
+      - RERANK_BATCH_SIZE=32
+      - TEI_BASE_URL=${TEI_BASE_URL}
+      - MODEL_PATH=${RERANKER_MODEL_PATH}
+      - PORT=8000
+      - HF_HUB_OFFLINE=1
+  db-vector:
+    image: qdrant/qdrant:latest
+    depends_on:
+      inference-model:
+        condition: service_healthy
+    profiles: ["codebase-indexing", "dev"]
+    container_name: db-vector
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    labels:
+      - "ephemeral=false"
+      - "persistence=hfs"
+    volumes:
+      - ${HOME}/.qdrant_data:/qdrant/storage
