@@ -5,10 +5,13 @@ import logging
 import httpx
 import torch
 import time
+import asyncio
+import hashlib
+from collections import OrderedDict
 from fastapi import FastAPI, HTTPException, Request, Response
 from contextlib import asynccontextmanager
 from fastapi.concurrency import run_in_threadpool
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel
 from torchao.quantization import quantize_, Int4WeightOnlyConfig
 
 logging.basicConfig(
@@ -18,35 +21,92 @@ logging.basicConfig(
 )
 logger = logging.getLogger("SmartProxy")
 
-def require_env(name: str, default: str = None) -> str:
-    value = os.environ.get(name, default)
-    if not value:
-        logger.error(f"❌ Required ENV var '{name}' not set")
-        sys.exit(1)
-    return value
-
 TEI_BASE_URL = "http://dedicated-embedding-model:8000"
 REAL_QDRANT_URL = "http://db-vector-1536d:6333"
 PORT = int(os.environ.get("PORT", 8000))
 MODEL_PATH = os.environ.get("MODEL_PATH", "jinaai/jina-reranker-v3")
-RERANK_BATCH_SIZE = int(os.environ.get("RERANK_BATCH_SIZE", "4"))
+RERANK_BATCH_SIZE = 64 # Use listwise arch now that we implemented it
 
 QUERY_PREFIX = "Find the code snippet most similar to the query of:\n"
 PASSAGE_PREFIX = "Candidate code snippet:\n"
 
-LATEST_QUERY_TEXT = None
+
+class QueryCache:
+    def __init__(self, max_size: int = 1000, ttl_seconds: int = 60):
+        self.cache: OrderedDict[str, tuple[str, float]] = OrderedDict()
+        self.max_size = max_size
+        self.ttl = ttl_seconds
+        self._lock = asyncio.Lock()
+        self._hits = 0
+        self._misses = 0
+    
+    def _hash_vector(self, vector: list) -> str:
+        key = ",".join(f"{v:.6f}" for v in vector[:32])
+        # Like unc Fowler says, it's jus cache invalidation and namin thangz
+        return hashlib.md5(key.encode()).hexdigest()
+    
+    def _evict_expired(self) -> int:
+        now = time.time()
+        expired = [k for k, (_, ts) in self.cache.items() if now - ts > self.ttl]
+        for k in expired:
+            del self.cache[k]
+        return len(expired)
+    
+    async def store(self, vector: list, query_text: str) -> None:
+        async with self._lock:
+            evicted = self._evict_expired()
+            if evicted > 0:
+                logger.debug(f"Evicted {evicted} expired cache entries")
+            
+            h = self._hash_vector(vector)
+            self.cache[h] = (query_text, time.time())
+            self.cache.move_to_end(h)
+            
+            if len(self.cache) > self.max_size:
+                self.cache.popitem(last=False)
+                logger.debug(f"LRU eviction triggered, cache size: {self.max_size}")
+            
+            preview = query_text[:50] + "..." if len(query_text) > 50 else query_text
+            logger.debug(f"Cached query: {preview}")
+    
+    async def get(self, vector: list) -> str | None:
+        async with self._lock:
+            self._evict_expired()
+            h = self._hash_vector(vector)
+            entry = self.cache.get(h)
+            
+            if entry:
+                self._hits += 1
+                self.cache.move_to_end(h)
+                logger.debug(f"Cache hit (hits: {self._hits}, misses: {self._misses})")
+                return entry[0]
+            
+            self._misses += 1
+            logger.debug(f"Cache miss (hits: {self._hits}, misses: {self._misses})")
+            return None
+    
+    async def stats(self) -> dict:
+        async with self._lock:
+            return {
+                "size": len(self.cache),
+                "max_size": self.max_size,
+                "ttl_seconds": self.ttl,
+                "hits": self._hits,
+                "misses": self._misses,
+                "hit_rate": self._hits / (self._hits + self._misses) if (self._hits + self._misses) > 0 else 0.0
+            }
+
+
+query_cache = QueryCache(max_size=1000, ttl_seconds=60)
 http_client = None
 model = None
-tokenizer = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global http_client, model, tokenizer
+    global http_client, model
     
-    logger.info(f"🚀 Loading Reranker ({MODEL_PATH}) with TorchAO...")
+    logger.info(f"Loading Reranker ({MODEL_PATH}) with TorchAO...")
     try:
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH, trust_remote_code=True)
-        
         model = AutoModel.from_pretrained(
             MODEL_PATH,
             trust_remote_code=True,
@@ -55,13 +115,13 @@ async def lifespan(app: FastAPI):
             device_map="cuda"
         )
 
-        logger.info("🔨 Applying TorchAO Int4 Quantization...")
+        logger.info("Applying TorchAO Int4 Quantization...")
         quantize_(model, Int4WeightOnlyConfig(group_size=128))
         
         model.eval()
-        logger.info("✅ Reranker Loaded & Quantized")
+        logger.info("Reranker Loaded & Quantized")
     except Exception as e:
-        logger.error(f"❌ Failed to load reranker: {e}")
+        logger.error(f"Failed to load reranker: {e}")
 
     http_client = httpx.AsyncClient(
         timeout=120.0, 
@@ -85,6 +145,10 @@ async def list_models():
         ]
     }
 
+@app.get("/v1/cache/stats")
+async def cache_stats():
+    return await query_cache.stats()
+
 @app.post("/v1/embeddings")
 async def create_embeddings(request: Request):
     try:
@@ -93,28 +157,34 @@ async def create_embeddings(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     raw_input = body.get("input")
-    if not raw_input: raise HTTPException(status_code=400, detail="Missing input")
+    if not raw_input:
+        raise HTTPException(status_code=400, detail="Missing input")
     
-    global LATEST_QUERY_TEXT
     texts = [raw_input] if isinstance(raw_input, str) else raw_input
     
-    if len(texts) == 1 and len(texts[0]) < 2000:
-        LATEST_QUERY_TEXT = texts[0]
+    if not texts:
+        raise HTTPException(status_code=400, detail="Empty input array")
+    
+    is_query = len(texts) == 1 and len(texts[0]) < 2000
+    original_query_text = texts[0] if is_query else None
 
     processed_inputs = []
     for t in texts:
-        if len(texts) == 1 and len(t) < 2000:
-             processed_inputs.append(QUERY_PREFIX + t)
+        if is_query:
+            processed_inputs.append(QUERY_PREFIX + t)
         else:
-             processed_inputs.append(PASSAGE_PREFIX + t)
+            processed_inputs.append(PASSAGE_PREFIX + t)
 
     try:
         resp = await http_client.post(f"{TEI_BASE_URL}/embed", json={"inputs": processed_inputs, "truncate": True})
         resp.raise_for_status()
         embeddings = resp.json()
     except Exception as e:
-        logger.error(f"❌ TEI Embedder Failed: {e}")
+        logger.error(f"TEI Embedder Failed: {e}")
         raise HTTPException(status_code=500, detail="Embedder Failed")
+
+    if is_query and original_query_text and embeddings and len(embeddings) > 0:
+        await query_cache.store(embeddings[0], original_query_text)
 
     total_chars = sum(len(t) for t in texts)
     approx_tokens = max(1, total_chars // 4)
@@ -128,8 +198,7 @@ async def create_embeddings(request: Request):
 
 @app.post("/collections/{collection_name}/points/search")
 async def proxy_qdrant_search(collection_name: str, request: Request):
-    global LATEST_QUERY_TEXT
-    logger.info(f"🔎 Search: {collection_name}")
+    logger.info(f"Search: {collection_name}")
     
     try:
         body = await request.json()
@@ -141,32 +210,53 @@ async def proxy_qdrant_search(collection_name: str, request: Request):
     except:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
+    search_vector = body.get("vector")
+    query_text = None
+    
+    if search_vector:
+        if isinstance(search_vector, list) and len(search_vector) > 0 and isinstance(search_vector[0], (int, float)):
+            query_text = await query_cache.get(search_vector)
+        elif isinstance(search_vector, dict) and "vector" in search_vector:
+            query_text = await query_cache.get(search_vector["vector"])
+    
+    if query_text:
+        logger.info(f"Correlated query: {query_text[:50]}...")
+    else:
+        logger.warning("No query text found in cache - reranking will be skipped")
+
     try:
         q_res = await http_client.post(f"{REAL_QDRANT_URL}/collections/{collection_name}/points/search", json=body)
         q_res.raise_for_status()
         data = q_res.json()
         results = data.get("result", [])
     except Exception as e:
-        logger.error(f"❌ Qdrant Search Failed: {e}")
+        logger.error(f"Qdrant Search Failed: {e}")
         raise HTTPException(status_code=502, detail="Qdrant Failed")
 
-    if LATEST_QUERY_TEXT and results and model:
+    if query_text and results and model:
         candidates = []
         valid_indices = []
         for i, hit in enumerate(results):
             payload = hit.get("payload", {})
             text = payload.get("text") or payload.get("content") or payload.get("snippet") or payload.get("code")
+            
+            file_path = payload.get("file_path") or payload.get("path") or payload.get("filename")
+            if text and file_path:
+                text = f"File: {file_path}\n{text}"
+            
             if text:
                 candidates.append(text)
                 valid_indices.append(i)
         
         if candidates:
-            logger.info(f"✨ Reranking {len(candidates)} candidates")
+            logger.info(f"Reranking {len(candidates)} candidates")
             try:
                 all_scores = []
-                for i in range(0, len(candidates), RERANK_BATCH_SIZE):
-                    batch = candidates[i : i + RERANK_BATCH_SIZE]
-                    batch_scores = await run_in_threadpool(run_rerank_sync, LATEST_QUERY_TEXT, batch)
+                for batch_start in range(0, len(candidates), RERANK_BATCH_SIZE):
+                    batch = candidates[batch_start : batch_start + RERANK_BATCH_SIZE]
+                    batch_scores = await run_in_threadpool(run_rerank_sync, query_text, batch)
+                    for item in batch_scores:
+                        item["index"] = item["index"] + batch_start
                     all_scores.extend(batch_scores)
 
                 reranked_hits = []
@@ -181,13 +271,13 @@ async def proxy_qdrant_search(collection_name: str, request: Request):
                 
                 if original_score_threshold is not None:
                     reranked_hits = [hit for hit in reranked_hits if hit["score"] >= original_score_threshold]
-                    logger.info(f"📊 After threshold filter ({original_score_threshold}): {len(reranked_hits)} results")
+                    logger.info(f"After threshold filter ({original_score_threshold}): {len(reranked_hits)} results")
                 
                 data["result"] = reranked_hits[:original_limit]
                 return data
 
             except Exception as e:
-                logger.error(f"⚠️ Reranking Failed: {e}")
+                logger.error(f"Reranking Failed: {e}")
                 if original_score_threshold is not None:
                     results = [hit for hit in results if hit.get("score", 0) >= original_score_threshold]
                 data["result"] = results[:original_limit]
@@ -195,7 +285,7 @@ async def proxy_qdrant_search(collection_name: str, request: Request):
 
     if original_score_threshold is not None:
         results = [hit for hit in results if hit.get("score", 0) >= original_score_threshold]
-        logger.info(f"📊 After threshold filter ({original_score_threshold}): {len(results)} results")
+        logger.info(f"After threshold filter ({original_score_threshold}): {len(results)} results")
     
     data["result"] = results[:original_limit]
     return data
@@ -205,7 +295,7 @@ async def catch_all_proxy(request: Request, path_name: str):
     req_id = str(int(time.time() * 1000))[-6:]
     target_url = f"{REAL_QDRANT_URL}/{path_name}"
     
-    logger.info(f"[{req_id}] 📥 {request.method} /{path_name}")
+    logger.info(f"[{req_id}] {request.method} /{path_name}")
 
     excluded = {"host", "content-length", "transfer-encoding", "connection", "keep-alive", "accept-encoding"}
     clean_headers = {k: v for k, v in request.headers.items() if k.lower() not in excluded}
@@ -227,10 +317,10 @@ async def catch_all_proxy(request: Request, path_name: str):
             headers=clean_headers
         )
         
-        logger.info(f"[{req_id}] ⬅️ Status: {resp.status_code}")
+        logger.info(f"[{req_id}] -> Status: {resp.status_code}")
 
         if resp.status_code == 409 and request.method == "PUT" and path_name.startswith("collections/"):
-            logger.info(f"[{req_id}] ⚠️ Converting 409 Conflict to 200 OK (collection already exists)")
+            logger.info(f"[{req_id}] Converting 409 Conflict to 200 OK (collection already exists)")
             return Response(
                 content=b'{"result":true,"status":"ok"}',
                 status_code=200,
@@ -249,7 +339,7 @@ async def catch_all_proxy(request: Request, path_name: str):
         )
 
     except Exception as e:
-        logger.error(f"[{req_id}] ❌ V2 PROXY FAIL: {e}")
+        logger.error(f"[{req_id}] V2 PROXY FAIL: {e}")
         raise HTTPException(status_code=502, detail=f"Proxy Failed: {e}")
 
 
