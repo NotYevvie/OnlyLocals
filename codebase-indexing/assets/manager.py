@@ -134,6 +134,8 @@ async def proxy_qdrant_search(collection_name: str, request: Request):
     try:
         body = await request.json()
         original_limit = body.get("limit", 20)
+        original_score_threshold = body.pop("score_threshold", None)
+        logger.info(f"Request received. Limit {original_limit}, Score Threshold: {original_score_threshold}")
         body["limit"] = 100 
         body["with_payload"] = True 
     except:
@@ -176,14 +178,25 @@ async def proxy_qdrant_search(collection_name: str, request: Request):
                     reranked_hits.append(hit)
                 
                 reranked_hits.sort(key=lambda x: x["score"], reverse=True)
+                
+                if original_score_threshold is not None:
+                    reranked_hits = [hit for hit in reranked_hits if hit["score"] >= original_score_threshold]
+                    logger.info(f"📊 After threshold filter ({original_score_threshold}): {len(reranked_hits)} results")
+                
                 data["result"] = reranked_hits[:original_limit]
                 return data
 
             except Exception as e:
                 logger.error(f"⚠️ Reranking Failed: {e}")
+                if original_score_threshold is not None:
+                    results = [hit for hit in results if hit.get("score", 0) >= original_score_threshold]
                 data["result"] = results[:original_limit]
                 return data
 
+    if original_score_threshold is not None:
+        results = [hit for hit in results if hit.get("score", 0) >= original_score_threshold]
+        logger.info(f"📊 After threshold filter ({original_score_threshold}): {len(results)} results")
+    
     data["result"] = results[:original_limit]
     return data
 
