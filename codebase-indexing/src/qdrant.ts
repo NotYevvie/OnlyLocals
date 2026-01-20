@@ -76,10 +76,10 @@ const searchVectors = async (
   try { 
     const { collections } = (await getJsonFromQdrantApi('collections')).result;
     details = await Promise.all(collections.map(async (col: any) => {
-      const { indexed_vectors_count } = (await getJsonFromQdrantApi(`collections/${col.name}`)).result;
+      const { points_count } = (await getJsonFromQdrantApi(`collections/${col.name}`)).result;
       return {
         name: col.name,
-        indexed_vectors_count
+        points_count
       };
     }));
   } catch {
@@ -88,7 +88,7 @@ const searchVectors = async (
   }
 
   console.log('Available collections:');
-  console.log(details.map((detail: any, idx: number) => `  Index: [${idx}] Name: [${detail.name}] - Vectors: [${detail.indexed_vectors_count}]`).join('\n'));
+  console.log(details.map((detail: any, idx: number) => `  Index: [${idx}] Name: [${detail.name}] - Vectors: [${detail.points_count}]`).join('\n'));
   const collectionIndex = await getUserInput('Select collection index (type in 1, 2, 3 etc and hit Enter): ');
   const activeCollectionName = details[parseInt(collectionIndex, 10)]?.name;
   const numResultsInput = await getUserInput('Enter number of results to return (default 5): ');

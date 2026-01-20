@@ -285,7 +285,7 @@ export async function checkHostEnvironment() {
   }
   
   const requiredModels = [
-    "model/jinaai/jina-code-embeddings-0.5b",
+    process.env.EMBEDDING_MODEL || "model/jinaai/jina-code-embeddings-0.5b",
     "model/jinaai/jina-reranker-v3"
   ];
   

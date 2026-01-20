@@ -1,4 +1,9 @@
 services:
+
+  # ==============================
+  # ===== SHARED VRAM MODELS =====
+  # ==============================
+  # https://www.yevelations.com/p/dev-from-scratch-5n
   embedding-model:
     image:  yevai/codebase-index-embed:sm120-cu131-v1
     env_file:
@@ -68,6 +73,82 @@ services:
       - MODEL_PATH=${RERANKER_MODEL_PATH}
       - PORT=8000
       - HF_HUB_OFFLINE=1
+
+  # ==============================
+  # === DEDICATED VRAM MODELS ====
+  # ==============================
+  # https://www.yevelations.com/p/dev-from-scratch-7n
+  dedicated-embedding-model:
+    image:  yevai/codebase-index-embed:sm120-cu131-v1
+    env_file:
+      - .env
+    profiles: ["dedicated-codebase-indexing"]
+    container_name: dedicated-embedding-inference
+    restart: "no"
+    labels:
+      - "ephemeral=true"
+      - "persistence=none"
+    runtime: nvidia
+    pid: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ${HF_CACHE_DIR}:/data
+    command:
+      - --model-id
+      - ${EMBEDDING_MODEL_PATH}
+      - --pooling
+      - last-token
+      - --max-client-batch-size
+      - "${MAX_CLIENT_BATCH_SIZE:-64}"
+      - --max-batch-tokens
+      - "${MAX_BATCH_TOKENS:-32768}"
+  dedicated-embedding-manager:
+    image: yevai/codebase-index-rerank:sm120-cu131-v1
+    env_file:
+      - .env
+    depends_on:
+      - dedicated-embedding-model
+      - db-vector-1536d
+    profiles: ["dedicated-codebase-indexing"]
+    container_name: dedicated-embedding-manager
+    restart: "no"
+    labels:
+      - "ephemeral=true"
+      - "persistence=none"
+    runtime: nvidia
+    pid: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    ports:
+      - "1335:8000"
+    volumes:
+      - ${HF_CACHE_DIR}:/data
+      - ./assets/manager.py:/app/manager.py
+    environment:
+      - TEI_BASE_URL=${TEI_BASE_URL}
+      - MODEL_PATH=${RERANKER_MODEL_PATH}
+      - PORT=8000
+      - HF_HUB_OFFLINE=1
+      - PYTHONUNBUFFERED=1
   db-vector:
     image: qdrant/qdrant:latest
     profiles: ["codebase-indexing"]
@@ -80,3 +161,15 @@ services:
       - "persistence=hfs"
     volumes:
       - ${HOME}/.qdrant_data:/qdrant/storage
+  db-vector-1536d:
+    image: qdrant/qdrant:latest
+    profiles: ["dedicated-codebase-indexing"]
+    container_name: db-vector-1536d
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    labels:
+      - "ephemeral=false"
+      - "persistence=hfs"
+    volumes:
+      - ${HOME}/.qdrant_data_1536d:/qdrant/storage
