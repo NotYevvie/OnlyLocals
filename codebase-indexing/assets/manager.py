@@ -175,23 +175,43 @@ async def create_embeddings(request: Request):
         else:
             processed_inputs.append(PASSAGE_PREFIX + t)
 
+    all_embeddings = []
+    total_items = len(processed_inputs)
+    
+    if total_items > RERANK_BATCH_SIZE:
+        logger.info(f"Chunking {total_items} inputs into batches of {RERANK_BATCH_SIZE}")
+    
     try:
-        resp = await http_client.post(f"{TEI_BASE_URL}/embed", json={"inputs": processed_inputs, "truncate": True})
-        resp.raise_for_status()
-        embeddings = resp.json()
+        for batch_start in range(0, total_items, RERANK_BATCH_SIZE):
+            batch_end = min(batch_start + RERANK_BATCH_SIZE, total_items)
+            batch_inputs = processed_inputs[batch_start:batch_end]
+            
+            resp = await http_client.post(
+                f"{TEI_BASE_URL}/embed",
+                json={"inputs": batch_inputs, "truncate": True}
+            )
+            resp.raise_for_status()
+            batch_embeddings = resp.json()
+            all_embeddings.extend(batch_embeddings)
+            
+            if total_items > RERANK_BATCH_SIZE:
+                logger.debug(f"Processed batch {batch_start // RERANK_BATCH_SIZE + 1}/{(total_items + RERANK_BATCH_SIZE - 1) // RERANK_BATCH_SIZE}")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"TEI Embedder Failed: {e.response.status_code} - {e.response.text}")
+        raise HTTPException(status_code=500, detail=f"Embedder Failed: {e.response.status_code}")
     except Exception as e:
         logger.error(f"TEI Embedder Failed: {e}")
         raise HTTPException(status_code=500, detail="Embedder Failed")
 
-    if is_query and original_query_text and embeddings and len(embeddings) > 0:
-        await query_cache.store(embeddings[0], original_query_text)
+    if is_query and original_query_text and all_embeddings and len(all_embeddings) > 0:
+        await query_cache.store(all_embeddings[0], original_query_text)
 
     total_chars = sum(len(t) for t in texts)
     approx_tokens = max(1, total_chars // 4)
     
     return {
         "object": "list",
-        "data": [{"object": "embedding", "embedding": vec, "index": i} for i, vec in enumerate(embeddings)],
+        "data": [{"object": "embedding", "embedding": vec, "index": i} for i, vec in enumerate(all_embeddings)],
         "model": "jina-code-embeddings",
         "usage": {"prompt_tokens": approx_tokens, "total_tokens": approx_tokens}
     }

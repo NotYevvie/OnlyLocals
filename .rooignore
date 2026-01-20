@@ -31,6 +31,8 @@ Pipfile.lock
 **/__tests__/
 **/tests/
 **/*.test.*
+**/*-test_*
+**/*-test-*
 **/*.spec.*
 **/test_*.py
 **/*_test.py
