@@ -1,0 +1,69 @@
+litellm_settings:
+  callbacks: ["langfuse"]
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+  request_timeout: 600
+  set_verbose: true
+  drop_params: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: postgresql://postgres:postgres@db:5432/litellm
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 3
+  timeout: 30
+
+model_list:
+  # Local
+  - model_name: NVFP4/Qwen3-Coder-30B-A3B-Instruct-FP4
+    litellm_params:
+      model: openai/NVFP4/Qwen3-Coder-30B-A3B-Instruct-FP4
+      api_base: http://localhost:1337/v1
+      api_key: dummy
+
+  - model_name: jinaai/jina-code-embeddings-0.5b
+    litellm_params:
+      model: openai/jinaai/jina-code-embeddings-0.5b
+      api_base: http://localhost:1335/v1
+      api_key: dummy
+
+  - model_name: jinaai/jina-code-embeddings-1.5b
+    litellm_params:
+      model: openai/jinaai/jina-code-embeddings-1.5b
+      api_base: http://localhost:1335/v1
+      api_key: dummy
+
+  - model_name: jinaai/jina-reranker-v3
+    litellm_params:
+      model: openai/jina_ai/jina-reranker-v3
+      api_base: http://localhost:1335
+      api_key: dummy
+
+  # Anthropic
+  - model_name: claude-opus-4-5-20251101
+    litellm_params:
+      model: anthropic/claude-opus-4-5-20251101
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-sonnet-4-5
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5-20250929
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-haiku-4-5-20251001
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # Google Gemini
+  - model_name: gemini-3-pro-preview
+    litellm_params:
+      model: gemini/gemini-3-pro-preview
+      api_key: os.environ/GOOGLE_AI_STUDIO_API_KEY
+
+  - model_name: gemini-3-flash-preview
+    litellm_params:
+      model: gemini/gemini-3-flash-preview
+      api_key: os.environ/GOOGLE_AI_STUDIO_API_KEY
