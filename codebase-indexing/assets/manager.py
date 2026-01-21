@@ -21,8 +21,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("SmartProxy")
 
-TEI_BASE_URL = "http://dedicated-embedding-model:8000"
-REAL_QDRANT_URL = "http://db-vector-1536d:6333"
+def require_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        logger.error(f"Required ENV var '{name}' not set")
+        sys.exit(1)
+    return value
+
+TEI_BASE_URL = require_env("TEI_BASE_URL")
+VECTOR_DB_BASE_URL = require_env("VECTOR_DB_BASE_URL")
 PORT = int(os.environ.get("PORT", 8000))
 MODEL_PATH = os.environ.get("MODEL_PATH", "jinaai/jina-reranker-v3")
 RERANK_BATCH_SIZE = 64 # Use listwise arch now that we implemented it
@@ -245,7 +252,7 @@ async def proxy_qdrant_search(collection_name: str, request: Request):
         logger.warning("No query text found in cache - reranking will be skipped")
 
     try:
-        q_res = await http_client.post(f"{REAL_QDRANT_URL}/collections/{collection_name}/points/search", json=body)
+        q_res = await http_client.post(f"{VECTOR_DB_BASE_URL}/collections/{collection_name}/points/search", json=body)
         q_res.raise_for_status()
         data = q_res.json()
         results = data.get("result", [])
@@ -313,7 +320,7 @@ async def proxy_qdrant_search(collection_name: str, request: Request):
 @app.api_route("/{path_name:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"])
 async def catch_all_proxy(request: Request, path_name: str):
     req_id = str(int(time.time() * 1000))[-6:]
-    target_url = f"{REAL_QDRANT_URL}/{path_name}"
+    target_url = f"{VECTOR_DB_BASE_URL}/{path_name}"
     
     logger.info(f"[{req_id}] {request.method} /{path_name}")
 

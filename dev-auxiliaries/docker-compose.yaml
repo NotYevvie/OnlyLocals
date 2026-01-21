@@ -1,0 +1,105 @@
+services:
+  # ==============================
+  # ==== LM API OBSERVABILITY ====
+  # ==============================
+  db:
+    image: postgres:16
+    container_name: langfuse-postgres
+    profiles: ["lm-observability"]
+    restart: unless-stopped
+    network_mode: host
+    labels:
+      - "service=langfuse"
+      - "component=database"
+      - "persistence=true"
+    environment:
+      - POSTGRES_USER=${LANGFUSE_DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${LANGFUSE_DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${LANGFUSE_DB_NAME:-postgres}
+      - PGPORT=${LANGFUSE_DB_PORT:-5432}
+    volumes:
+      - ${HOME}/.langfuse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LANGFUSE_DB_USER:-postgres} -h localhost -p ${LANGFUSE_DB_PORT:-5432}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: langfuse-app
+    profiles: ["lm-observability"]
+    restart: unless-stopped
+    network_mode: host
+    labels:
+      - "service=langfuse"
+      - "component=app"
+      - "persistence=true"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${LANGFUSE_DB_USER:-postgres}:${LANGFUSE_DB_PASSWORD:-postgres}@localhost:${LANGFUSE_DB_PORT:-5432}/${LANGFUSE_DB_NAME:-postgres}
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-mysecret}
+      - SALT=${LANGFUSE_SALT:-mysalt}
+      - NEXTAUTH_URL=${LANGFUSE_NEXTAUTH_URL:-http://localhost:3000}
+      - PORT=${LANGFUSE_PORT:-3000}
+    volumes:
+      - ${HOME}/.langfuse_app_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  langfuse-worker:
+    image: langfuse/langfuse:latest
+    container_name: langfuse-worker
+    profiles: ["lm-observability"]
+    restart: unless-stopped
+    network_mode: host
+    labels:
+      - "service=langfuse"
+      - "component=worker"
+      - "persistence=true"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://${LANGFUSE_DB_USER:-postgres}:${LANGFUSE_DB_PASSWORD:-postgres}@localhost:${LANGFUSE_DB_PORT:-5432}/${LANGFUSE_DB_NAME:-postgres}
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-mysecret}
+      - SALT=${LANGFUSE_SALT:-mysalt}
+      - NEXTAUTH_URL=${LANGFUSE_NEXTAUTH_URL:-http://localhost:3000}
+    command: ["node", "dist/server/ingestionService/ingestionService.js"]
+
+  litellm:
+    image: docker.litellm.ai/berriai/litellm:main-stable
+    container_name: litellm-proxy
+    profiles: ["lm-observability"]
+    restart: unless-stopped
+    network_mode: host
+    labels:
+      - "service=litellm"
+      - "component=proxy"
+      - "persistence=false"
+    depends_on:
+      langfuse-worker:
+        condition: service_started
+    environment:
+      - LITELLM_LOG=INFO
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
+      - LANGFUSE_HOST=http://localhost:${LANGFUSE_PORT:-3000}
+      - LITELLM_PROXY_LISTENING_PORT=${LITELLM_PORT:-4000}
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+      - ${HOME}/.litellm_logs:/var/log/litellm
+    command: ["--config", "/app/config.yaml", "--detailed_debug"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${LITELLM_PORT:-4000}/health/liveliness"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

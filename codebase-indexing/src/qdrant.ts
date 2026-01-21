@@ -7,7 +7,7 @@ const PROXY_URL = process.env.PROXY_URL || 'http://localhost:1335';
 
 // These are here because they are lightweight, zero dependency, and work on Node/Bun/Deno
 const getJsonFromQdrantApi = async (url: string) => {
-  return  JSON.parse(await (await fetch(`${QDRANT_URL}/${url}`)).text());
+  return JSON.parse(await (await fetch(`${QDRANT_URL}/${url}`)).text());
 }
 
 const getUserInput = async (prompt: string) => {
@@ -24,7 +24,7 @@ const getEmbedding = async (text: string): Promise<number[]> => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-    },  
+    },
     body: JSON.stringify({
       input: text,
     }),
@@ -36,13 +36,14 @@ const getEmbedding = async (text: string): Promise<number[]> => {
   }
 
   const data = await response.json();
-  
+
   return data.data[0].embedding;
 }
 
 const searchVectors = async (
   collectionName: string,
   vector: number[],
+  filePath?: string,
   limit: number = 10
 ) => {
   const response = await fetch(
@@ -51,9 +52,11 @@ const searchVectors = async (
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        vector: vector,
-        limit: limit,
-        with_payload: true,
+        ...{
+          vector,
+          limit,
+          with_payload: true,
+        }, ...{ filter: filePath ? { must: [{ key: "file_path", match: { value: filePath } }] } : undefined }
       }),
     }
   );
@@ -73,7 +76,7 @@ const searchVectors = async (
 
   let details: any[] = [];
 
-  try { 
+  try {
     const { collections } = (await getJsonFromQdrantApi('collections')).result;
     details = await Promise.all(collections.map(async (col: any) => {
       const { points_count } = (await getJsonFromQdrantApi(`collections/${col.name}`)).result;
@@ -89,11 +92,11 @@ const searchVectors = async (
 
   console.log('Available collections:');
   console.log(details.map((detail: any, idx: number) => `  Index: [${idx}] Name: [${detail.name}] - Vectors: [${detail.points_count}]`).join('\n'));
-  const collectionIndex = await getUserInput('Select collection index (type in 1, 2, 3 etc and hit Enter): ');
+  const collectionIndex = await getUserInput('Select collection index (type in 1, 2, 3 etc and hit Enter. default 0): ') || '0';
   const activeCollectionName = details[parseInt(collectionIndex, 10)]?.name;
   const numResultsInput = await getUserInput('Enter number of results to return (default 5): ');
-  console.log(`\nCollection [${activeCollectionName}] selected`);
-
+  const searchFile = await getUserInput('Optional file path filter (Ex.: "src/index" or "codebase-indexing/docker-compose.yaml"): ') || '';
+  
 
   while (true) {
     const userQuestion = await getUserInput('Enter search query (or "quit" or "exit"): ');
@@ -105,16 +108,19 @@ const searchVectors = async (
       continue;
     }
     const vectorArray = await getEmbedding(userQuestion);
-    const searchResponse = await searchVectors(
-      activeCollectionName, 
-      vectorArray, 
+    const { result } = await searchVectors(
+      activeCollectionName,
+      vectorArray,
+      searchFile,
       parseInt(numResultsInput, 10) || 5
     );
+
+    console.dir(result, { depth: null });
     console.log(`\n${"=".repeat(80)}`);
     console.log(`Search Results for: "${userQuestion}"`);
     console.log(`${"=".repeat(80)}`);
 
-    searchResponse.result.forEach((hit: any, idx: number) => {
+    result.forEach((hit: any, idx: number) => {
       const p = hit.payload;
       console.log(`\n[${idx + 1}] Score: ${hit.score.toFixed(4)}`);
       console.log(`${p.filePath}:${p.startLine}-${p.endLine}`);
