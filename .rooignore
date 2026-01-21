@@ -1,4 +1,15 @@
 # ============================================================================
+# RECOMMENDED TO REVIEW AND CUSTOMIZE
+# ============================================================================
+**/*benchmarks*
+**/*migration*
+**/*turbopack*
+**/*examples*
+**/*crates*
+**/*font*
+**/*docs*
+
+# ============================================================================
 # DEPENDENCIES
 # ============================================================================
 node_modules/
@@ -6,12 +17,8 @@ node_modules/
 .yarn/cache/
 pnpm_modules/
 **/*.lock
-package-lock.json
-yarn.lock
+**/*-lock.json
 bun.lockb
-poetry.lock
-Pipfile.lock
-Cargo.lock
 
 # ============================================================================
 # BUILD OUTPUTS
