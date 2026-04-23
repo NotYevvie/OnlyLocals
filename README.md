@@ -5,7 +5,7 @@ This is a companion repository for my substack series.
 [Docker](https://github.com/docker/docker-install), [Bun](https://bun.com/docs/installation), and a [Blackwell GPU](https://www.yevelations.com/p/dev-from-scratch-1n) are [All You Need](https://arxiv.org/abs/1706.03762).
 
 
-# Substack series links
+# Substack Series Summary and Roadmap
 
 ### Dev From Scratch: 1/n
 
