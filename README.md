@@ -41,7 +41,7 @@ This is a companion repository for my substack series.
 
 ### [ROADMAP, UNRELEASED] Dev From Scratch: 9/n
 
-This chapter will cover installing updated images (courtesy of yours truly) for Qwen 3.6 and Gemma 4, which also implement TurboQuant and 3 other papers I found useful.
+This chapter will cover installing updated images (courtesy of yours truly) for Qwen 3.6 and Gemma 4. These images will implement TurboQuant, 3 other recent research papers I found useful, and several of my personal favorite optimizations for TPS and VRAM consumption on consumer hardware.
 
 ### [ROADMAP, UNRELEASED] Dev From Scratch: 10/n
 
