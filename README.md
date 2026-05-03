@@ -41,7 +41,7 @@ This is a companion repository for my substack series.
 
 ### [ROADMAP, UNRELEASED] Dev From Scratch: 9/n
 
-This chapter will cover installing updated images (courtesy of yours truly) for Qwen 3.6 and Gemma 4. These images will implement TurboQuant, 3 other recent research papers I found useful, and several of my personal favorite optimizations for TPS and VRAM consumption on consumer hardware.
+[This chapter](https://www.yevelations.com/p/dev-from-scratch-9n) is one where OP finally delivered 750 aggregate TPS / 720K aggregate context window for Qwen 3.6 35B-A3B on a single 5090.
 
 ### [ROADMAP, UNRELEASED] Dev From Scratch: 10/n
 
