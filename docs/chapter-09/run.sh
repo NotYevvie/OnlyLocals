@@ -20,7 +20,7 @@ readonly -a PROFILES=(
 readonly -a SHARED=(inference-model embedding-inference embedding-manager db-vector)
 
 die()   { printf '%s\n' "$*" >&2; exit 1; }
-usage() { printf 'Usage: %s <profile|--stop>\n\nProfiles:\n' "$(basename "$0")"; printf '  %s\n' "${PROFILES[@]}"; }
+usage() { printf 'Usage: %s <profile|--stop|logs:inference>\n\nProfiles:\n' "$(basename "$0")"; printf '  %s\n' "${PROFILES[@]}"; }
 
 valid() { local p; for p in "${PROFILES[@]}"; do [[ "$p" == "$1" ]] && return 0; done; return 1; }
 
@@ -31,8 +31,17 @@ launch() {
   docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile "$1" up -d --remove-orphans
 }
 
+logs_inference() {
+  local cid
+  cid="$(docker ps -q --filter 'ancestor=yevai/local-inference-qwen36' --filter 'ancestor=yevai/local-inference-qwen36:sm120-cu132-v4' 2>/dev/null | head -1)"
+  [[ -z "$cid" ]] && cid="$(docker ps -q --filter 'name=inference-model' | head -1)"
+  [[ -z "$cid" ]] && die "No running inference container found."
+  exec docker logs -f "$cid"
+}
+
 case "${1:-}" in
-  --stop)       purge; echo "Stopped." ;;
-  --help|-h|"") usage ;;
-  *)            valid "$1" || { usage >&2; die "Unknown profile: $1"; }; launch "$1" ;;
+  --stop)          purge; echo "Stopped." ;;
+  logs:inference)  logs_inference ;;
+  --help|-h|"")    usage ;;
+  *)               valid "$1" || { usage >&2; die "Unknown profile: $1"; }; launch "$1" ;;
 esac
