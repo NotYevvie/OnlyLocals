@@ -1,4 +1,5 @@
 import { runCommand } from "./runner.ts";
+import { EMBEDDING_MODEL, RERANKER_MODEL } from "./hfCache.ts";
 
 declare const process: any;
 
@@ -285,8 +286,8 @@ export async function checkHostEnvironment() {
   }
   
   const requiredModels = [
-    process.env.EMBEDDING_MODEL || "model/jinaai/jina-code-embeddings-0.5b",
-    "model/jinaai/jina-reranker-v3"
+    EMBEDDING_MODEL,
+    RERANKER_MODEL
   ];
   
   const modelResults = await Promise.all(

@@ -1,0 +1,74 @@
+# --- Deps ---
+node_modules/
+**/node_modules/
+**/.venv/
+**/venv/
+**/.pnpm-store/
+**/vendor/
+
+# --- Caches ---
+**/__pycache__/
+.mypy_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.pytest_cache/
+**/.cache/
+**/.turbo/
+
+# --- Builds ---
+**/dist/
+**/build/
+**/out/
+**/out-build/
+**/out-vscode/
+**/.next/
+**/target/
+
+# --- Kilo ---
+.kilo/
+.vscode/
+**/.vscode-test/
+
+# --- Temp ---
+.temp/
+**/*temp*
+**/*.env*
+docs/chapter-09/webui_data/
+**/*.qdrant/
+**/webui_data/
+
+# --- Lockfiles ---
+**/package-lock.json
+**/yarn.lock
+**/pnpm-lock.yaml
+**/Cargo.lock
+**/*.min.js
+**/*.min.css
+**/*.map
+**/*.svg
+**/*.png
+**/*.jpg
+**/*.gif
+**/*.ico
+**/*.woff*
+**/*.ttf
+**/*.pdf
+
+# --- VSC Test ---
+modules/microsoft-vscode/**/test/
+modules/microsoft-vscode/**/testWorkspace*/
+modules/microsoft-vscode/**/test-workspace/
+modules/microsoft-vscode/build/
+modules/microsoft-vscode/cli/openssl/
+modules/microsoft-vscode/scripts/
+modules/microsoft-vscode/resources/
+modules/microsoft-vscode/remote/
+modules/microsoft-vscode/extensions/**/syntaxes/
+modules/microsoft-vscode/extensions/**/snippets/
+modules/microsoft-vscode/extensions/**/colorize-fixtures/
+modules/microsoft-vscode/extensions/**/*.tmLanguage.json
+modules/microsoft-vscode/extensions/**/language-configuration.json
+modules/microsoft-vscode/src/typings/
+modules/microsoft-vscode/**/*.nls.json
+modules/microsoft-vscode/**/ThirdPartyNotices*.txt
+modules/microsoft-vscode/**/cgmanifest.json

@@ -69,6 +69,12 @@ export async function upsertTokenizer(assetsPath: string = "./assets"): Promise<
         const snapshotDir = await getEmbeddingModelSnapshotDir();
         console.log(`  Model snapshot: ${snapshotDir}`);
 
+        if (!snapshotDir.includes("jina-code-embeddings")) {
+            console.log(`  Non-jina embedding model detected - skipping tokenizer asset copy.`);
+            console.log(`  (assets/ tokenizer files are specific to jina-code-embeddings; other models ship complete tokenizers)`);
+            return;
+        }
+
         const missingFiles = await getMissingFiles(snapshotDir);
 
         if (missingFiles.length === 0) {

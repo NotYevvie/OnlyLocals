@@ -5,8 +5,8 @@ declare const process: any;
 let hfCacheDir: string | null = null;
 const modelPaths: Map<string, string> = new Map();
 
-const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "model/jinaai/jina-code-embeddings-0.5b";
-const RERANKER_MODEL = "model/jinaai/jina-reranker-v3";
+export const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "model/jinaai/jina-code-embeddings-0.5b";
+export const RERANKER_MODEL = process.env.RERANKER_MODEL || "model/jinaai/jina-reranker-v3";
 
 export async function getHfCacheDir(): Promise<string> {
   if (hfCacheDir) {
